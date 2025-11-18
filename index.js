@@ -1,54 +1,62 @@
 import express from "express"
 import multer from "multer"
+import pdfParse from "pdf-parse"
+import { createWorker } from "tesseract.js"
 import fs from "fs"
-import { fromPath } from "pdf2pic"
-import pdfCounter from "pdf-page-counter"
-import Tesseract from "tesseract.js"
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.js"
 
 const app = express()
-
 const upload = multer({ dest: "uploads/" })
 
-app.get("/", (req, res) => {
-  res.json({ message: "OCR JS server working" })
-})
-
 app.post("/ocr", upload.single("file"), async (req, res) => {
-  try {
-    const filePath = req.file.path
+    try {
+        const pdfBuffer = fs.readFileSync(req.file.path)
 
-    // get page count
-    const buffer = fs.readFileSync(filePath)
-    const { numpages } = await pdfCounter(buffer)
+        const pdfInfo = await pdfParse(pdfBuffer)
+        if (pdfInfo.text.trim().length > 0) {
+            return res.json({ text: pdfInfo.text })
+        }
 
-    const converter = fromPath(filePath, {
-      density: 200,
-      saveFilename: "page",
-      savePath: "./uploads",
-      format: "png"
-    })
+        const doc = await getDocument({ data: pdfBuffer }).promise
+        const worker = await createWorker("eng")
 
-    let finalText = ""
+        let finalText = ""
 
-    for (let page = 1; page <= numpages; page++) {
-      const result = await converter(page)
-      const imgPath = result.path
+        for (let i = 1; i <= doc.numPages; i++) {
+            const page = await doc.getPage(i)
+            const viewport = page.getViewport({ scale: 2 })
 
-      const { data } = await Tesseract.recognize(imgPath, "eng")
-      finalText += data.text + "\n"
+            const canvasFactory = {
+                create: (w, h) => {
+                    const Canvas = require("canvas")
+                    const canvas = Canvas.createCanvas(w, h)
+                    return { canvas, context: canvas.getContext("2d") }
+                },
+                reset() {},
+                destroy() {}
+            }
 
-      fs.unlinkSync(imgPath)
+            const renderContext = {
+                canvasContext: canvasFactory.create(viewport.width, viewport.height).context,
+                viewport
+            }
+
+            await page.render(renderContext).promise
+
+            const image = renderContext.canvasContext.canvas.toBuffer("image/png")
+            const result = await worker.recognize(image)
+            finalText += result.data.text + "\n"
+        }
+
+        await worker.terminate()
+        fs.unlinkSync(req.file.path)
+
+        res.json({ text: finalText })
+
+    } catch (e) {
+        console.error("OCR FAILED", e)
+        res.json({ error: "OCR failed" })
     }
-
-    fs.unlinkSync(filePath)
-
-    res.json({ text: finalText.trim() })
-  } catch (err) {
-    console.error("OCR ERROR:", err)
-    res.status(500).json({ error: "OCR failed" })
-  }
 })
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Server running")
-})
+app.listen(3000, () => console.log("Server running"))

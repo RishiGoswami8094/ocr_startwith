@@ -25,3 +25,5 @@ easyocr
 numpy
 python-multipart
 Pillow
+scikit-image
+torch

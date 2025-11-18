@@ -4,5 +4,12 @@
 # pillow
 # pdf2image
 # python-multipart
+# fastapi
+# uvicorn
+
 fastapi
 uvicorn
+pymupdf
+pytesseract
+opencv-python-headless
+numpy

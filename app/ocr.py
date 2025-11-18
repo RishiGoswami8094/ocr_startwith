@@ -1,9 +1,11 @@
 import fitz  # PyMuPDF
+from PIL import Image
 import numpy as np
-import cv2
-from paddleocr import PaddleOCR
+import easyocr
 
-ocr_engine = PaddleOCR(use_angle_cls=True, lang="en")  # load once
+# Load EasyOCR reader once
+reader = easyocr.Reader(['en'], gpu=False)
+
 
 def pdf_to_images(pdf_bytes):
     images = []
@@ -12,28 +14,27 @@ def pdf_to_images(pdf_bytes):
     for page_index in range(len(pdf)):
         page = pdf.load_page(page_index)
         pix = page.get_pixmap(dpi=200)
+
         img_bytes = pix.tobytes("png")
 
-        img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+        # Convert to PIL Image
+        img = Image.open(fitz.BytesIO(img_bytes)).convert("RGB")
         images.append(img)
 
     return images
 
 
 def image_to_text(img):
-    # PaddleOCR requires RGB
-    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # EasyOCR accepts numpy arrays
+    np_img = np.array(img)
 
-    result = ocr_engine.ocr(rgb, cls=True)
+    result = reader.readtext(np_img, detail=1)
 
     if not result:
         return ""
 
-    text_lines = []
-
-    for line in result:
-        for box, text_data in line:
-            text_lines.append(text_data[0])
+    # result structure: [ [bbox, text, confidence], ... ]
+    text_lines = [item[1] for item in result]
 
     return "\n".join(text_lines)
 
@@ -47,7 +48,7 @@ def process_pdf(pdf_bytes):
     final_text = []
 
     for img in images:
-        txt = image_to_text(img)
-        final_text.append(txt)
+        text = image_to_text(img)
+        final_text.append(text)
 
     return "\n".join(final_text)

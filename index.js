@@ -3,7 +3,8 @@ import multer from "multer"
 import pdfParse from "pdf-parse"
 import { createWorker } from "tesseract.js"
 import fs from "fs"
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.js"
+import { getDocument } from "pdfjs-dist/build/pdf.mjs"
+import canvas from "canvas"
 
 const app = express()
 const upload = multer({ dest: "uploads/" })
@@ -26,25 +27,14 @@ app.post("/ocr", upload.single("file"), async (req, res) => {
             const page = await doc.getPage(i)
             const viewport = page.getViewport({ scale: 2 })
 
-            const canvasFactory = {
-                create: (w, h) => {
-                    const Canvas = require("canvas")
-                    const canvas = Canvas.createCanvas(w, h)
-                    return { canvas, context: canvas.getContext("2d") }
-                },
-                reset() {},
-                destroy() {}
-            }
+            const cnv = canvas.createCanvas(viewport.width, viewport.height)
+            const ctx = cnv.getContext("2d")
 
-            const renderContext = {
-                canvasContext: canvasFactory.create(viewport.width, viewport.height).context,
-                viewport
-            }
+            await page.render({ canvasContext: ctx, viewport }).promise
 
-            await page.render(renderContext).promise
+            const imageBuffer = cnv.toBuffer("image/png")
 
-            const image = renderContext.canvasContext.canvas.toBuffer("image/png")
-            const result = await worker.recognize(image)
+            const result = await worker.recognize(imageBuffer)
             finalText += result.data.text + "\n"
         }
 

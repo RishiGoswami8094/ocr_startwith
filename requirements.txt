@@ -13,3 +13,4 @@ pymupdf
 pytesseract
 opencv-python-headless
 numpy
+python-multipart

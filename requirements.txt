@@ -7,13 +7,21 @@
 # fastapi
 # uvicorn
 
+# fastapi
+# uvicorn
+# pymupdf
+# pytesseract
+# opencv-python-headless
+# numpy
+# python-multipart
+# paddlepaddle
+# paddleocr
+
+
 fastapi
 uvicorn
 pymupdf
-pytesseract
-opencv-python-headless
+easyocr
 numpy
 python-multipart
-
-paddlepaddle
-paddleocr
+Pillow

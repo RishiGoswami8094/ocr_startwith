@@ -1,31 +1,48 @@
 import express from "express"
 import multer from "multer"
-import { createWorker } from "tesseract.js"
+import { fromPath } from "pdf2pic"
+import Tesseract from "tesseract.js"
+import fs from "fs"
 
 const app = express()
-const upload = multer()
-
-app.get("/", (req, res) => {
-  res.json({ message: "JS OCR running" })
-})
+const upload = multer({ dest: "uploads/" })
 
 app.post("/ocr", upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" })
-  }
-
-  const worker = await createWorker("eng")
-
   try {
-    const result = await worker.recognize(req.file.buffer)
-    await worker.terminate()
-    res.json({ text: result.data.text })
+    const filePath = req.file.path
+
+    // Convert PDF to images
+    const convert = fromPath(filePath, {
+      density: 200,
+      saveFilename: "page",
+      savePath: "./uploads",
+      format: "png",
+      width: 1200,
+      height: 1600,
+    })
+
+    const pages = await convert(1, true) // convert all pages
+    const images = pages instanceof Array ? pages : [pages]
+
+    let finalText = ""
+
+    for (const img of images) {
+      const result = await Tesseract.recognize(img.path, "eng")
+      finalText += result.data.text + "\n"
+      fs.unlinkSync(img.path)
+    }
+
+    fs.unlinkSync(filePath)
+
+    res.json({ text: finalText.trim() })
   } catch (err) {
-    await worker.terminate()
-    res.status(500).json({ error: "OCR failed", details: err.toString() })
+    console.error(err)
+    res.status(500).json({ error: "OCR failed" })
   }
 })
 
-app.listen(process.env.PORT || 8080, "0.0.0.0", () => {
-  console.log("Server running")
+app.get("/", (req, res) => {
+  res.send("OCR server running")
 })
+
+app.listen(8080, () => console.log("Server running"))
